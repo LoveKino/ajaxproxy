@@ -1,0 +1,29 @@
+{
+    "name": "ajaxproxy",
+    "version": "0.0.1",
+    "description": "proxy ajax",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/LoveKino/ajaxproxy.git"
+    },
+    "keywords": [
+        "proxy",
+        "ajax",
+        "fetch",
+        "XMLHttpRequest"
+    ],
+    "author": "ddchen",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/LoveKino/ajaxproxy/issues"
+    },
+    "homepage": "https://github.com/LoveKino/ajaxproxy#readme",
+    "link_dependencies": {
+        "mirrorproxy": "~0.0.1",
+        "basetype": "~0.0.1"
+    }
+}
