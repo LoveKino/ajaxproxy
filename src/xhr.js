@@ -1,7 +1,7 @@
 'use strict';
 
 let {
-    mirrorClass
+    mirrorClass, cache
 } = require('mirrorproxy');
 
 let {
@@ -12,17 +12,7 @@ let {
     forEach
 } = require('bolzano');
 
-let cache = require('./cache');
-
-let cacheOptions = cache('__cache__options', {
-    headers: {}
-});
-
-let cacheResponse = cache('__cache_response', {});
-
 let id = v => v;
-
-let isTarFun = (name, v, target) => name === target && isFunction(v);
 
 let unique = {};
 
@@ -43,24 +33,20 @@ let unique = {};
  */
 
 module.exports = (env = window) => {
+    let reqSetMap = {
+        'send': proxySend,
+        'open': proxyOpen,
+        'setRequestHeader': proxySetRequestHeader
+    };
+
     let proxyXMLHttpRequest = (opts = {}) => {
         env.XMLHttpRequest = mirrorClass(env.XMLHttpRequest, [], {
             getHandle: (v, name, obj) => {
-                if (isTarFun(name, v, 'send')) {
-                    return proxySend(v, obj, opts);
-                } else if (isTarFun(name, v, 'open')) {
-                    return proxyOpen(v, obj, opts);
-                } else if (isTarFun(name, v, 'setRequestHeader')) {
-                    return proxySetRequestHeader(v, obj, opts);
-                } else if (name === 'status') {
-                    return getResponseItem(obj, 'status');
-                } else if (name === 'statusText') {
-                    return getResponseItem(obj, 'statusText');
-                } else if (name === 'response' ||
-                    name === 'responseText' ||
-                    name === 'responseXML'
-                ) {
-                    return getResponseItem(obj, 'body');
+                // check cache first
+                if (cache.fromCache(obj, name)) {
+                    return cache.fromCache(obj, name).value;
+                } else if (reqSetMap[name] && isFunction(v)) {
+                    return reqSetMap[name](v, obj, opts);
                 }
 
                 return v;
@@ -70,7 +56,7 @@ module.exports = (env = window) => {
                 if (name === 'onreadystatechange' && isFunction(v)) {
                     return function(...args) {
                         return Promise.resolve(
-                            this.readyState === 4 ? proxyResponseReady(obj, this, opts) : null
+                            obj.readyState === 4 ? proxyResponseReady(obj, opts) : null
                         ).then(() => {
                             return v.apply(this, args);
                         });
@@ -84,38 +70,47 @@ module.exports = (env = window) => {
     return proxyXMLHttpRequest;
 };
 
-let proxyResponseReady = (obj, mirror, {
+let proxyResponseReady = (obj, {
     proxyResponse = id
 }) => {
+    // TODO response headers
     let response = {
-        status: mirror.status,
-        statusText: mirror.statusText,
-        bodyType: mirror.responseType,
-        body: mirror.response
+        status: obj.status,
+        statusText: obj.statusText,
+        bodyType: obj.responseType,
+        body: obj.response
     };
 
-    // TODO response headers
     return Promise.resolve(proxyResponse(response)).then((response) => {
-        // apply
-        cacheResponse.init(obj, response);
+        cacheResponse(obj, response);
     });
 };
 
-let getResponseItem = (obj, name) => {
-    let resObj = cacheResponse.get(obj);
-    return resObj[name];
+let cacheResponse = (obj, {
+    status, statusText, body
+}) => {
+    // apply add to cache
+    cache.cacheProp(obj, 'status', status);
+    cache.cacheProp(obj, 'statusText', statusText);
+    cache.cacheProp(obj, 'response', body);
+    cache.cacheProp(obj, 'responseText', body);
+    cache.cacheProp(obj, 'responseXML', body);
+    // TODO more response body
 };
 
 // setRequestHeader(header, value)
 let proxySetRequestHeader = (v, obj) => {
-    let options = cacheOptions.get(obj);
-
     return function(...args) {
         if (args[0] === unique) {
             args.shift();
             return v.apply(this, args);
         } else {
             let [header, value] = args;
+            let options = cache.fetchPropValue(obj, 'options', {
+                headers: {}
+            }, {
+                hide: true
+            });
             options.headers[header] = value;
         }
     };
@@ -124,42 +119,66 @@ let proxySetRequestHeader = (v, obj) => {
 // open(method, url, async, user, password)
 let proxyOpen = (v, obj) => {
     return function(...args) {
-        let options = cacheOptions.init(obj);
-
         if (args[0] === unique) {
             args.shift();
             return v.apply(this, args);
         } else {
             let [method, url, asyn, user, password] = args;
-            options.method = method;
-            options.url = url;
-            options.async = asyn || true;
-            options.user = user;
-            options.password = password;
+            if (asyn !== false) asyn = true;
+            cache.cacheProp(obj, 'options', {
+                method, url, user, password,
+                'async': asyn,
+                headers: {}
+            }, {
+                hide: true
+            });
         }
     };
 };
 
 // TODO sync
 let proxySend = (v, obj, {
-    proxyOptions = id
+    proxyOptions = id, proxySend
 }) => {
-    let options = cacheOptions.get(obj);
-
     return function(data) {
+        let options = cache.fetchPropValue(obj, 'options', {
+            headers: {}
+        }, {
+            hide: true
+        });
+
         options.body = data;
 
         return Promise.resolve(proxyOptions(options)).then((options) => {
-            // TODO interface to modify
             this.open(unique, options.method, options.url, options.async, options.user, options.password);
 
             let headers = options.headers;
             forEach(headers, (value, name) => {
                 this.setRequestHeader(name, value);
             });
-            cacheOptions.init(obj);
-            //
-            return v.apply(this, [options.body]);
+
+            cache.removeCache(obj, 'options');
+
+            if (proxySend) {
+                return Promise.resolve(proxySend(options)).then(response => {
+                    if (options.async !== false) {
+                        return new Promise((resolve) => {
+                            setTimeout(() => {
+                                resolve(response);
+                            }, 0);
+                        });
+                    }
+                    return response;
+                }).then((response) => {
+                    cache.cacheProp(obj, 'readyState', 4);
+                    cacheResponse(obj, response);
+                    // apply
+                    obj.onreadystatechange && obj.onreadystatechange();
+                });
+            } else {
+                // send request
+                return v.apply(this, [options.body]);
+            }
         });
     };
 };

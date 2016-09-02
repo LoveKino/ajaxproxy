@@ -70,10 +70,30 @@ let test3 = () => {
     });
 };
 
+let test4 = () => {
+    proxyAjax({
+        xhr: {
+            proxySend: () => {
+                return {
+                    body: '75869'
+                };
+            }
+        }
+    });
+
+    return xhr('proxySend').then(res => {
+        assert.equal(res, '75869');
+    }).then(() => {
+        recovery();
+    });
+};
+
 test1().then(() => {
     return test2();
 }).then(() => {
     return test3();
+}).then(() => {
+    return test4();
 }).then(() => {
     console.log('[success]'); // eslint-disable-line
 });
