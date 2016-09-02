@@ -24,6 +24,7 @@
     "homepage": "https://github.com/LoveKino/ajaxproxy#readme",
     "link_dependencies": {
         "mirrorproxy": "~0.0.1",
-        "basetype": "~0.0.1"
+        "basetype": "~0.0.1",
+        "bolzano": "~0.0.1"
     }
 }

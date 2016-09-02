@@ -40,9 +40,9 @@ let test1 = () => {
 let test2 = () => {
     proxyAjax({
         xhr: {
-            beforeSend: (ctx) => {
-                // change path
-                ctx.open('GET', 'http://127.0.0.1:3000/newgood');
+            proxyOptions: (options) => {
+                options.url = 'http://127.0.0.1:3000/newgood';
+                return options;
             }
         }
     });
@@ -53,8 +53,27 @@ let test2 = () => {
     });
 };
 
+let test3 = () => {
+    proxyAjax({
+        xhr: {
+            proxyResponse: (response) => {
+                response.body = 'modified response';
+                return response;
+            }
+        }
+    });
+
+    return xhr('response').then(res => {
+        assert.equal(res, 'modified response');
+    }).then(() => {
+        recovery();
+    });
+};
+
 test1().then(() => {
     return test2();
+}).then(() => {
+    return test3();
 }).then(() => {
     console.log('[success]'); // eslint-disable-line
 });
