@@ -17,6 +17,8 @@ var xhr = function(path) {
 
     xmlhttp.open('GET', 'http://127.0.0.1:3000/' + path);
 
+    xmlhttp.setRequestHeader('Accept', 'text');
+
     xmlhttp.send();
 
     return new Promise((resolve) => {
@@ -42,6 +44,13 @@ let test2 = () => {
         xhr: {
             proxyOptions: (options) => {
                 options.url = 'http://127.0.0.1:3000/newgood';
+
+                options.headers = {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                };
+
                 return options;
             }
         }

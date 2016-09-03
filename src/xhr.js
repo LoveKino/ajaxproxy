@@ -1,7 +1,7 @@
 'use strict';
 
 let {
-    mirrorClass, cache
+    mirrorClass, cache, hide
 } = require('mirrorproxy');
 
 let {
@@ -13,8 +13,6 @@ let {
 } = require('bolzano');
 
 let id = v => v;
-
-let unique = {};
 
 /**
  *  control aspect
@@ -33,38 +31,52 @@ let unique = {};
  */
 
 module.exports = (env = window) => {
-    let reqSetMap = {
-        'send': proxySend,
-        'open': proxyOpen,
-        'setRequestHeader': proxySetRequestHeader
-    };
-
     let proxyXMLHttpRequest = (opts = {}) => {
-        env.XMLHttpRequest = mirrorClass(env.XMLHttpRequest, [], {
-            getHandle: (v, name, obj) => {
-                // check cache first
-                if (cache.fromCache(obj, name)) {
-                    return cache.fromCache(obj, name).value;
-                } else if (reqSetMap[name] && isFunction(v)) {
-                    return reqSetMap[name](v, obj, opts);
-                }
+        let proxyGet = (proxy) => (v, obj, shadow) => proxy(v, obj, shadow, opts);
 
-                return v;
-            },
+        env.XMLHttpRequest =
+            mirrorClass(env.XMLHttpRequest, [
+                hide('send', {
+                    getHandle: proxyGet(proxySend)
+                }),
 
-            setHandle: (v, name, obj) => {
-                if (name === 'onreadystatechange' && isFunction(v)) {
-                    return function(...args) {
-                        return Promise.resolve(
-                            obj.readyState === 4 ? proxyResponseReady(obj, opts) : null
-                        ).then(() => {
-                            return v.apply(this, args);
-                        });
-                    };
-                }
-                return v;
-            }
-        });
+                hide('open', {
+                    getHandle: proxyGet(proxyOpen)
+                }),
+
+                hide('setRequestHeader', {
+                    getHandle: proxyGet(proxySetRequestHeader)
+                }),
+
+                {
+                    name: 'onreadystatechange',
+                    setHandle: (v, obj) => {
+                        if (!isFunction(v)) return v;
+                        return function(...args) {
+                            return Promise.resolve(
+                                obj.readyState === 4 ? proxyResponseReady(obj, opts) : null
+                            ).then(() => {
+                                return v.apply(this, args);
+                            });
+                        };
+                    }
+                },
+
+                // hide all read only properties
+                hide('readyState'),
+
+                hide('response'),
+
+                hide('responseText'),
+
+                hide('status'),
+
+                hide('statusText'),
+
+                hide('responseXML'),
+
+                hide('responseType')
+            ]);
     };
 
     return proxyXMLHttpRequest;
@@ -81,7 +93,13 @@ let proxyResponseReady = (obj, {
         body: obj.response
     };
 
-    return Promise.resolve(proxyResponse(response)).then((response) => {
+    let options = cache.fetchPropValue(obj, 'options', {
+        headers: {}
+    }, {
+        hide: true
+    });
+
+    return Promise.resolve(proxyResponse(response, options)).then((response) => {
         cacheResponse(obj, response);
     });
 };
@@ -101,43 +119,33 @@ let cacheResponse = (obj, {
 // setRequestHeader(header, value)
 let proxySetRequestHeader = (v, obj) => {
     return function(...args) {
-        if (args[0] === unique) {
-            args.shift();
-            return v.apply(this, args);
-        } else {
-            let [header, value] = args;
-            let options = cache.fetchPropValue(obj, 'options', {
-                headers: {}
-            }, {
-                hide: true
-            });
-            options.headers[header] = value;
-        }
+        let [header, value] = args;
+        let options = cache.fetchPropValue(obj, 'options', {
+            headers: {}
+        }, {
+            hide: true
+        });
+        options.headers[header] = value;
     };
 };
 
 // open(method, url, async, user, password)
 let proxyOpen = (v, obj) => {
     return function(...args) {
-        if (args[0] === unique) {
-            args.shift();
-            return v.apply(this, args);
-        } else {
-            let [method, url, asyn, user, password] = args;
-            if (asyn !== false) asyn = true;
-            cache.cacheProp(obj, 'options', {
-                method, url, user, password,
-                'async': asyn,
-                headers: {}
-            }, {
-                hide: true
-            });
-        }
+        let [method, url, asyn, user, password] = args;
+        if (asyn !== false) asyn = true;
+        cache.cacheProp(obj, 'options', {
+            method, url, user, password,
+            'async': asyn,
+            headers: {}
+        }, {
+            hide: true
+        });
     };
 };
 
 // TODO sync
-let proxySend = (v, obj, {
+let proxySend = (v, obj, mirror, {
     proxyOptions = id, proxySend
 }) => {
     return function(data) {
@@ -150,14 +158,12 @@ let proxySend = (v, obj, {
         options.body = data;
 
         return Promise.resolve(proxyOptions(options)).then((options) => {
-            this.open(unique, options.method, options.url, options.async, options.user, options.password);
+            mirror.open(options.method, options.url, options.async, options.user, options.password);
 
             let headers = options.headers;
             forEach(headers, (value, name) => {
-                this.setRequestHeader(name, value);
+                mirror.setRequestHeader(name, value);
             });
-
-            cache.removeCache(obj, 'options');
 
             if (proxySend) {
                 return Promise.resolve(proxySend(options)).then(response => {
@@ -177,7 +183,7 @@ let proxySend = (v, obj, {
                 });
             } else {
                 // send request
-                return v.apply(this, [options.body]);
+                return v.apply(mirror, [options.body || null]);
             }
         });
     };
