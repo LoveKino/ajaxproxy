@@ -165,9 +165,11 @@ let proxySend = (v, obj, mirror, {
                 mirror.setRequestHeader(name, value);
             });
 
+            let send = () => v.apply(mirror, [options.body || null]);
+
             if (proxySend) {
-                return Promise.resolve(proxySend(options)).then(response => {
-                    if (options.async !== false) {
+                return Promise.resolve(proxySend(options)).then((response) => {
+                    if (response && options.async !== false) {
                         return new Promise((resolve) => {
                             setTimeout(() => {
                                 resolve(response);
@@ -176,14 +178,18 @@ let proxySend = (v, obj, mirror, {
                     }
                     return response;
                 }).then((response) => {
-                    cache.cacheProp(obj, 'readyState', 4);
-                    cacheResponse(obj, response);
-                    // apply
-                    obj.onreadystatechange && obj.onreadystatechange();
+                    if (!response) {
+                        return send();
+                    } else {
+                        cache.cacheProp(obj, 'readyState', 4);
+                        cacheResponse(obj, response);
+                        // apply
+                        obj.onreadystatechange && obj.onreadystatechange();
+                    }
                 });
             } else {
                 // send request
-                return v.apply(mirror, [options.body || null]);
+                return send();
             }
         });
     };
