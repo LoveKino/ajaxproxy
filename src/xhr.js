@@ -9,7 +9,7 @@ let {
 } = require('basetype');
 
 let {
-    forEach
+    forEach, reduce, map
 } = require('bolzano');
 
 let id = v => v;
@@ -48,15 +48,32 @@ module.exports = (env = window) => {
                     getHandle: proxyGet(proxySetRequestHeader)
                 }),
 
+                hide('getResponseHeader', {
+                    getHandle: proxyGet(proxyGetResponseHeader)
+                }),
+
+                hide('getAllResponseHeaders', {
+                    getHandle: proxyGet(proxyGetAllResponseHeaders)
+                }),
+
                 {
                     name: 'onreadystatechange',
                     setHandle: (v, obj) => {
                         if (!isFunction(v)) return v;
-                        return function(...args) {
+                        return function(e) {
                             return Promise.resolve(
                                 obj.readyState === 4 ? proxyResponseReady(obj, opts) : null
                             ).then(() => {
-                                return v.apply(this, args);
+                                // TODO event proxyer
+                                let newE = reduce(e, (prev, v, n) => {
+                                    prev[n] = v;
+                                    return prev;
+                                }, {});
+                                newE.isTrusted = true;
+                                newE.target = obj;
+                                newE.srcElement = obj;
+                                newE.currentTarget = obj;
+                                return v.apply(this, newE);
                             });
                         };
                     }
@@ -64,6 +81,8 @@ module.exports = (env = window) => {
 
                 // hide all read only properties
                 hide('readyState'),
+
+                hide('responseURL'),
 
                 hide('response'),
 
@@ -90,7 +109,8 @@ let proxyResponseReady = (obj, {
         status: obj.status,
         statusText: obj.statusText,
         bodyType: obj.responseType,
-        body: obj.response
+        body: obj.response,
+        headers: parseResponseHeaders(obj.getAllResponseHeaders())
     };
 
     let options = cache.fetchPropValue(obj, 'options', {
@@ -105,7 +125,7 @@ let proxyResponseReady = (obj, {
 };
 
 let cacheResponse = (obj, {
-    status, statusText, body
+    status, statusText, body, headers = {}
 }) => {
     // apply add to cache
     cache.cacheProp(obj, 'status', status);
@@ -114,6 +134,10 @@ let cacheResponse = (obj, {
     cache.cacheProp(obj, 'responseText', body);
     cache.cacheProp(obj, 'responseXML', body);
     // TODO more response body
+    // response headers
+    cache.cacheProp(obj, 'responseHeaders', headers, {
+        hide: true
+    });
 };
 
 // setRequestHeader(header, value)
@@ -142,6 +166,32 @@ let proxyOpen = (v, obj) => {
             hide: true
         });
     };
+};
+
+let proxyGetResponseHeader = (v, obj, mirror) => {
+    return function(name = '') {
+        let headers = cache.fetchPropValue(obj, 'responseHeaders', {}, {
+            hide: true
+        });
+        name = map(name.split('-'), (item) => {
+            let first = item[0].toUpperCase();
+            return first + item.substring(1);
+        }).join('-');
+        if (headers[name]) return headers[name];
+        return v.apply(mirror, [name]);
+    };
+};
+
+let proxyGetAllResponseHeaders = (v, obj, mirror) => {
+    return function() {
+        let headers = cache.fetchPropValue(obj, 'responseHeaders', null, {
+            hide: true
+        });
+
+        if (headers) return headersToString(headers);
+        return v.apply(mirror, []);
+    };
+
 };
 
 // TODO sync
@@ -182,9 +232,20 @@ let proxySend = (v, obj, mirror, {
                         return send();
                     } else {
                         cache.cacheProp(obj, 'readyState', 4);
+                        cache.cacheProp(obj, 'responseURL', options.url);
                         cacheResponse(obj, response);
                         // apply
-                        obj.onreadystatechange && obj.onreadystatechange();
+                        let e = new Event('readystatechange', {
+                            bubble: false,
+                            cancelBubble: false,
+                            cancelable: false,
+                            defaultPrevented: false,
+                            eventPhase: 0,
+                            isTrusted: true,
+                            path: [],
+                            returnValue: true
+                        });
+                        obj.dispatchEvent(e);
                     }
                 });
             } else {
@@ -193,4 +254,37 @@ let proxySend = (v, obj, mirror, {
             }
         });
     };
+};
+
+/**
+ * XmlHttpRequest's getAllResponseHeaders() method returns a string of response
+ * headers according to the format described here:
+ * http://www.w3.org/TR/XMLHttpRequest/#the-getallresponseheaders-method
+ * This method parses that string into a user-friendly key/value pair object.
+ */
+function parseResponseHeaders(headerStr) {
+    var headers = {};
+    if (!headerStr) {
+        return headers;
+    }
+    var headerPairs = headerStr.split('\u000d\u000a');
+    for (var i = 0; i < headerPairs.length; i++) {
+        var headerPair = headerPairs[i];
+        // Can't use split() here because it does the wrong thing
+        // if the header value has the string ": " in it.
+        var index = headerPair.indexOf('\u003a\u0020');
+        if (index > 0) {
+            var key = headerPair.substring(0, index);
+            var val = headerPair.substring(index + 2);
+            headers[key] = val;
+        }
+    }
+    return headers;
+}
+
+let headersToString = (headers) => {
+    return reduce(headers, (prev, v, n) => {
+        prev += `${n}: ${v}\n`;
+        return prev;
+    }, '');
 };

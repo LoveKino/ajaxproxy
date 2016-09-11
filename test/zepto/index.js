@@ -36,6 +36,30 @@ let test1 = () => {
     });
 };
 
+// mock
+let test2 = () => {
+    proxyAjax({
+        xhr: {
+            proxySend: () => {
+                return {
+                    status: 200,
+                    statusText: 'OK',
+                    bodyType: '',
+                    body: '12345'
+                };
+            }
+        }
+    });
+
+    return xhr('hello').then(res => {
+        assert.equal(res, '12345');
+    }).then(() => {
+        recovery();
+    });
+};
+
 test1().then(() => {
+    return test2();
+}).then(() => {
     console.log('[success]'); // eslint-disable-line
 });

@@ -2,6 +2,8 @@
 
 let ProxyXhr = require('./xhr');
 
+// TODO fetch
+
 /**
  *  control aspect
  *
