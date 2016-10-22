@@ -26,5 +26,11 @@
     "basetype": "^0.1.0",
     "bolzano": "0.0.1",
     "mirrorproxy": "0.0.1"
+  },
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "mocha": "^3.1.2",
+    "webpack": "^1.13.2",
+    "webpack-dev-server": "^1.16.2"
   }
 }

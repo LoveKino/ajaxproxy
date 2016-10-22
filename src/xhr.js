@@ -207,6 +207,11 @@ let proxySend = (v, obj, mirror, {
 
         options.body = data;
 
+        // make default ready handler
+        if(!obj.onreadystatechange) {
+            obj.onreadystatechange = id;
+        }
+
         return Promise.resolve(proxyOptions(options)).then((options) => {
             mirror.open(options.method, options.url, options.async, options.user, options.password);
 

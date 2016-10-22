@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>test!</title>
+</head>
+<body>
+    <div id="mocha"></div>
+
+    <script src="./mocha.js"></script>
+    <script src="./chai.js"></script>
+    <script>mocha.setup('bdd')</script>
+
+    <script src="./ajaxproxy-lib/ajaxproxy.js"></script>
+
+    <!--test scripts start-->
+    <script src="./test/index.js"></script>
+    <!--test scripts end-->
+
+    <script>
+        mocha.checkLeaks();
+        mocha.run();
+    </script>
+</body>
+</html>
