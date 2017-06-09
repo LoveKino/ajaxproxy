@@ -4,7 +4,7 @@
   "description": "proxy ajax",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha \"test/function/**/*.js\""
   },
   "repository": {
     "type": "git",
@@ -28,6 +28,7 @@
     "mirrorproxy": "0.0.1"
   },
   "devDependencies": {
+    "browser-js-env": "0.0.10",
     "chai": "^3.5.0",
     "mocha": "^3.1.2",
     "webpack": "^1.13.2",

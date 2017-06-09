@@ -191,7 +191,6 @@ let proxyGetAllResponseHeaders = (v, obj, mirror) => {
         if (headers) return headersToString(headers);
         return v.apply(mirror, []);
     };
-
 };
 
 // TODO sync
