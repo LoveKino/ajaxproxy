@@ -4,7 +4,7 @@
   "description": "proxy ajax",
   "main": "index.js",
   "scripts": {
-    "test": "mocha \"test/function/**/*.js\""
+    "test": "mocha \"test/function/**/*.js\" -t 1000000"
   },
   "repository": {
     "type": "git",
@@ -30,6 +30,7 @@
   "devDependencies": {
     "browser-js-env": "0.0.10",
     "chai": "^3.5.0",
+    "jsenhance": "0.0.3",
     "mocha": "^3.1.2",
     "webpack": "^1.13.2",
     "webpack-dev-server": "^1.16.2"

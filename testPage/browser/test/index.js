@@ -53,6 +53,7 @@ describe('proxy xhr', () => {
                 }
             }
         });
+
         return xhr('/fixture/test1.txt').then(res => {
             assert.equal(res, '0000\n');
         }).then(() => {
